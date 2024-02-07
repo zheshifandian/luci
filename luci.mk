@@ -18,7 +18,7 @@ LUCI_MINIFY_LUA?=1
 LUCI_MINIFY_CSS?=1
 LUCI_MINIFY_JS?=1
 
-# Language code titles
+#LUCI_LANG_START
 LUCI_LANG.ar=العربية (Arabic)
 LUCI_LANG.bg=български (Bulgarian)
 LUCI_LANG.bn_BD=বাংলা (Bengali)
@@ -27,7 +27,6 @@ LUCI_LANG.cs=Čeština (Czech)
 LUCI_LANG.da=Dansk (Danish)
 LUCI_LANG.de=Deutsch (German)
 LUCI_LANG.el=Ελληνικά (Greek)
-LUCI_LANG.en=English
 LUCI_LANG.es=Español (Spanish)
 LUCI_LANG.fi=Suomi (Finnish)
 LUCI_LANG.fr=Français (French)
@@ -37,13 +36,14 @@ LUCI_LANG.hu=Magyar (Hungarian)
 LUCI_LANG.it=Italiano (Italian)
 LUCI_LANG.ja=日本語 (Japanese)
 LUCI_LANG.ko=한국어 (Korean)
+LUCI_LANG.lt=Lietuvių (Lithuanian)
 LUCI_LANG.mr=Marāṭhī (Marathi)
 LUCI_LANG.ms=Bahasa Melayu (Malay)
 LUCI_LANG.nb_NO=Norsk (Norwegian)
 LUCI_LANG.nl=Nederlands (Dutch)
 LUCI_LANG.pl=Polski (Polish)
-LUCI_LANG.pt_BR=Português do Brasil (Brazilian Portuguese)
 LUCI_LANG.pt=Português (Portuguese)
+LUCI_LANG.pt_BR=Português do Brasil (Brazilian Portuguese)
 LUCI_LANG.ro=Română (Romanian)
 LUCI_LANG.ru=Русский (Russian)
 LUCI_LANG.sk=Slovenčina (Slovak)
@@ -53,6 +53,7 @@ LUCI_LANG.uk=Українська (Ukrainian)
 LUCI_LANG.vi=Tiếng Việt (Vietnamese)
 LUCI_LANG.zh_Hans=简体中文 (Chinese Simplified)
 LUCI_LANG.zh_Hant=繁體中文 (Chinese Traditional)
+#LUCI_LANG_END
 
 # Submenu titles
 LUCI_MENU.col=1. Collections
@@ -73,6 +74,7 @@ LUCI_LC_ALIAS.zh_Hant=zh-tw
 HTDOCS = /www
 LUA_LIBRARYDIR = /usr/lib/lua
 LUCI_LIBRARYDIR = $(LUA_LIBRARYDIR)/luci
+UCODE_LIBRARYDIR = /usr/share/ucode/luci
 
 
 # 1: everything expect po subdir or only po subdir
@@ -114,10 +116,10 @@ PKG_SRC_VERSION?=$(if $(DUMP),x,$(strip $(call findrev,1)))
 PKG_GITBRANCH?=$(if $(DUMP),x,$(strip $(shell \
 	variant="LuCI"; \
 	if git log -1 >/dev/null 2>/dev/null; then \
-		branch="$$(git branch --remote --verbose --no-abbrev --contains 2>/dev/null | \
-			sed -rne 's|^[^/]+/([^ ]+) [a-f0-9]{40} .+$$|\1|p' | head -n1)"; \
+		branch=$$(git branch --format='%(refname:strip=3)' --remote --no-abbrev --contains 2>/dev/null | tail -n1); \
+		branch=$${branch:-$$(git branch --format='%(refname:strip=2)' --no-abbrev --contains 2>/dev/null | tail -n1)}; \
 		if [ "$$branch" != "master" ]; then \
-			variant="LuCI $$branch branch"; \
+			variant="LuCI $${branch:-unknown} branch"; \
 		else \
 			variant="LuCI Master"; \
 		fi; \
@@ -127,12 +129,12 @@ PKG_GITBRANCH?=$(if $(DUMP),x,$(strip $(shell \
 
 include $(INCLUDE_DIR)/package.mk
 
-# LUCI_SUBMENU: the submenu-item below the LuCI top-level menu inside OpoenWrt menuconfig
+# LUCI_SUBMENU: the submenu-item below the LuCI top-level menu inside OpenWrt menuconfig
 #               usually one of the LUCI_MENU.* definitions
-# LUCI_SUBMENU_DEFAULT: the regular SUBMENU defined by LUCI_TYPE or derrived from the packagename
-# LUCI_SUBMENU_FORCED: manually forced value SUBMENU to set to by explicit definiton
-#                      can be any string, "none" disables the creation of a submenu 
-#                      most usefull in combination with LUCI_CATEGORY, to make the package appear
+# LUCI_SUBMENU_DEFAULT: the regular SUBMENU defined by LUCI_TYPE or derived from the packagename
+# LUCI_SUBMENU_FORCED: manually forced value SUBMENU to set to by explicit definition
+#                      can be any string, "none" disables the creation of a submenu
+#                      most useful in combination with LUCI_CATEGORY, to make the package appear
 #                      anywhere in the menu structure
 LUCI_SUBMENU_DEFAULT=$(if $(LUCI_MENU.$(LUCI_TYPE)),$(LUCI_MENU.$(LUCI_TYPE)),$(LUCI_MENU.app))
 LUCI_SUBMENU=$(if $(LUCI_SUBMENU_FORCED),$(LUCI_SUBMENU_FORCED),$(LUCI_SUBMENU_DEFAULT))
@@ -160,7 +162,7 @@ ifneq ($(LUCI_DESCRIPTION),)
 endif
 
 define Build/Prepare
-	for d in luasrc htdocs root src; do \
+	for d in luasrc ucode htdocs root src; do \
 	  if [ -d ./$$$$d ]; then \
 	    mkdir -p $(PKG_BUILD_DIR)/$$$$d; \
 		$(CP) ./$$$$d/* $(PKG_BUILD_DIR)/$$$$d/; \
@@ -185,34 +187,39 @@ else
 endif
 
 define Package/$(PKG_NAME)/install
-	if [ -d $(PKG_BUILD_DIR)/luasrc ]; then \
-	  $(INSTALL_DIR) $(1)$(LUCI_LIBRARYDIR); \
-	  cp -pR $(PKG_BUILD_DIR)/luasrc/* $(1)$(LUCI_LIBRARYDIR)/; \
-	  $(FIND) $(1)$(LUCI_LIBRARYDIR)/ -type f -name '*.luadoc' | $(XARGS) rm; \
-	  $(if $(CONFIG_LUCI_SRCDIET),$(call SrcDiet,$(1)$(LUCI_LIBRARYDIR)/),true); \
-	  $(call SubstituteVersion,$(1)$(LUCI_LIBRARYDIR)/); \
-	else true; fi
-	if [ -d $(PKG_BUILD_DIR)/htdocs ]; then \
-	  $(INSTALL_DIR) $(1)$(HTDOCS); \
-	  cp -pR $(PKG_BUILD_DIR)/htdocs/* $(1)$(HTDOCS)/; \
-	  $(if $(CONFIG_LUCI_JSMIN),$(call JsMin,$(1)$(HTDOCS)/),true); \
-	  $(if $(CONFIG_LUCI_CSSTIDY),$(call CssTidy,$(1)$(HTDOCS)/),true); \
-	else true; fi
-	if [ -d $(PKG_BUILD_DIR)/root ]; then \
-	  $(INSTALL_DIR) $(1)/; \
-	  cp -pR $(PKG_BUILD_DIR)/root/* $(1)/; \
-	else true; fi
-	if [ -d $(PKG_BUILD_DIR)/src ]; then \
-	  $(call Build/Install/Default) \
-	  $(CP) $(PKG_INSTALL_DIR)/* $(1)/; \
-	else true; fi
+
+ ifneq ($(wildcard ${CURDIR}/luasrc),)
+	$(INSTALL_DIR) $(1)$(LUCI_LIBRARYDIR)
+	cp -pR $(PKG_BUILD_DIR)/luasrc/* $(1)$(LUCI_LIBRARYDIR)/
+	$(FIND) $(1)$(LUCI_LIBRARYDIR)/ -type f -name '*.luadoc' | $(XARGS) rm
+	$(if $(CONFIG_LUCI_SRCDIET),$(call SrcDiet,$(1)$(LUCI_LIBRARYDIR)/),true)
+	$(call SubstituteVersion,$(1)$(LUCI_LIBRARYDIR)/)
+ endif
+ ifneq ($(wildcard ${CURDIR}/ucode),)
+	  $(INSTALL_DIR) $(1)$(UCODE_LIBRARYDIR)
+	  cp -pR $(PKG_BUILD_DIR)/ucode/* $(1)$(UCODE_LIBRARYDIR)/
+	  $(call SubstituteVersion,$(1)$(UCODE_LIBRARYDIR)/)
+ endif
+ ifneq ($(wildcard ${CURDIR}/htdocs),)
+	$(INSTALL_DIR) $(1)$(HTDOCS)
+	cp -pR $(PKG_BUILD_DIR)/htdocs/* $(1)$(HTDOCS)/
+	$(if $(CONFIG_LUCI_JSMIN),$(call JsMin,$(1)$(HTDOCS)/),true)
+	$(if $(CONFIG_LUCI_CSSTIDY),$(call CssTidy,$(1)$(HTDOCS)/),true)
+ endif
+ ifneq ($(wildcard ${CURDIR}/root),)
+	$(INSTALL_DIR) $(1)/
+	cp -pR $(PKG_BUILD_DIR)/root/* $(1)/
+ endif
+ ifneq ($(wildcard ${CURDIR}/src),)
+	$(call Build/Install/Default)
+	$(CP) $(PKG_INSTALL_DIR)/* $(1)/
+ endif
 endef
 
 ifndef Package/$(PKG_NAME)/postinst
 define Package/$(PKG_NAME)/postinst
-[ -n "$${IPKG_INSTROOT}" ] || {$(foreach script,$(LUCI_DEFAULTS),
-	(. /etc/uci-defaults/$(script)) && rm -f /etc/uci-defaults/$(script))
-	rm -f /tmp/luci-indexcache
+[ -n "$${IPKG_INSTROOT}" ] || { \
+	rm -f /tmp/luci-indexcache.*
 	rm -rf /tmp/luci-modulecache/
 	killall -HUP rpcd 2>/dev/null
 	exit 0
@@ -265,6 +272,11 @@ define SubstituteVersion
 		$(SED) 's/<%# *\([^ ]*\)PKG_VERSION *%>/\1$(if $(PKG_VERSION),$(PKG_VERSION),$(PKG_SRC_VERSION))/g' \
 		    -e 's/"\(<%= *\(media\|resource\) *%>[^"]*\.\(js\|css\)\)"/"\1?v=$(if $(PKG_VERSION),$(PKG_VERSION),$(PKG_SRC_VERSION))"/g' \
 			"$$$$src"; \
+	done; \
+	$(FIND) $(1) -type f -name '*.ut' | while read src; do \
+		$(SED) 's/{# *\([^ ]*\)PKG_VERSION *#}/\1$(if $(PKG_VERSION),$(PKG_VERSION),$(PKG_SRC_VERSION))/g' \
+		    -e 's/"\({{ *\(media\|resource\) *}}[^"]*\.\(js\|css\)\)"/"\1?v=$(if $(PKG_VERSION),$(PKG_VERSION),$(PKG_SRC_VERSION))"/g' \
+			"$$$$src"; \
 	done
 endef
 
@@ -280,13 +292,13 @@ ifeq ($(PKG_NAME),luci-base)
 	default y
 
    config LUCI_CSSTIDY
-        bool "Minify CSS files"
-        default n
+    bool "Minify CSS files"
+    default n
 
-   menu "Translations"$(foreach lang,$(LUCI_LANGUAGES),
+   menu "Translations"$(foreach lang,$(LUCI_LANGUAGES),$(if $(LUCI_LANG.$(lang)),
 
      config LUCI_LANG_$(lang)
-	   tristate "$(shell echo '$(LUCI_LANG.$(lang))' | sed -e 's/^.* (\(.*\))$$/\1/') ($(lang))")
+	   tristate "$(shell echo '$(LUCI_LANG.$(lang))' | sed -e 's/^.* (\(.*\))$$/\1/') ($(lang))"))
 
    endmenu
  endef
@@ -323,16 +335,9 @@ define LuciTranslation
 			$$(1)$(LUCI_LIBRARYDIR)/i18n/$(basename $(notdir $(po))).$(1).lmo;)
   endef
 
-  define Package/luci-i18n-$(LUCI_BASENAME)-$(1)/postinst
-	[ -n "$$$${IPKG_INSTROOT}" ] || {
-		(. /etc/uci-defaults/luci-i18n-$(LUCI_BASENAME)-$(1)) && rm -f /etc/uci-defaults/luci-i18n-$(LUCI_BASENAME)-$(1)
-		exit 0
-	}
-  endef
-
   LUCI_BUILD_PACKAGES += luci-i18n-$(LUCI_BASENAME)-$(1)
 
 endef
 
-$(foreach lang,$(LUCI_LANGUAGES),$(eval $(call LuciTranslation,$(firstword $(LUCI_LC_ALIAS.$(lang)) $(lang)),$(lang))))
+$(foreach lang,$(LUCI_LANGUAGES),$(if $(LUCI_LANG.$(lang)),$(eval $(call LuciTranslation,$(firstword $(LUCI_LC_ALIAS.$(lang)) $(lang)),$(lang)))))
 $(foreach pkg,$(LUCI_BUILD_PACKAGES),$(eval $(call BuildPackage,$(pkg))))
