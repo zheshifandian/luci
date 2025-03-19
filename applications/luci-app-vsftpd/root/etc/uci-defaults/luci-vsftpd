@@ -7,5 +7,8 @@ uci -q batch <<-EOF >/dev/null
 	commit ucitrack
 EOF
 
+uci set vsftpd.listen.enable4='0'
+uci commit vsftpd
+
 rm -f /tmp/luci-vsftpd
 exit 0

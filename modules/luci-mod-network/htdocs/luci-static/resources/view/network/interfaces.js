@@ -1578,7 +1578,7 @@ return view.extend({
 		o.value('0', _('Disabled'));
 		o.value('1',_('Enabled'));
 		o.value('2',_('Enabled (all CPUs)'));
-		o.default = '1';
+		o.default = '0';
 		o.optional = true;
 
 		var steer_flow = uci.get('network', 'globals', 'steering_flows');	
